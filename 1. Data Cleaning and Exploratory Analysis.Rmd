@@ -1,0 +1,177 @@
+---
+title: Appendix A. Data Cleaning and Exploratory Analysis
+output:
+  html_document: default
+---
+```{r setup, echo=F}
+knitr::opts_chunk$set(
+	echo = T,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE,
+	results = "hide",
+	fig.keep='all'
+)
+require(ggplot2)
+require(sctransform)
+require(Seurat)
+require(tidyverse)
+
+#These packages stop SNN from working for some reason
+detach(package:colortools)
+detach(package:RColorBrewer)
+```
+
+```{r,libraries,echo=FALSE}
+library(ggplot2)
+library(sctransform)
+library(Seurat)
+library(tidyverse)
+library(ggrepel)
+```
+
+
+## 1. Data Cleaning
+Data was given in nested matrices and was log-transformed.
+We first undo the log transform as well as create a data frame out of the matrices.
+
+```{r load data function}
+loadDataFromMatrix <- function(df) {
+  Patients <- c()
+  for (i in c(1:7)) {
+    m.df <- data.frame((10^(list_covid[[i]]) - 1))
+    n <- dim(m.df)[1]
+    m.df$Patient <- rep(paste0("C", i),times=n)
+    
+    df <- rbind(df,m.df)
+    Patients <- cbind(Patients,paste0("C",i))
+  }
+  
+  for(i in c(1:6)){
+    
+    m.df <- data.frame((10^(list_healthy[[i]]) - 1))
+    n <- dim(m.df)[1]
+    m.df$Patient <- rep(paste0("H", i),times=n)
+    
+    df <- rbind(df,m.df)
+    Patients <- cbind(Patients,paste0("H",i))
+  }
+  
+  df <- df %>% 
+    mutate(CovidPos = ifelse(grepl("C",df$Patient),"Covid","Control"))
+  m.df <- NULL
+  
+  #First dot in each 
+  colnames(df) <- sub("[.]","-",colnames(df))
+  
+  #Change one of the genes to its official gene ID
+  colnames(df)[colnames(df) == "IGJ"] <- "JCHAIN"
+  return(df)
+}
+```
+
+```{r loading dataframes}
+load("Bcell_gene_matrices.RData")
+
+B.df <- data.frame()
+B.df <- loadDataFromMatrix(B.df)
+
+load("CD8_gene_matrices.RData")
+
+CD8.df <- data.frame()
+CD8.df <- loadDataFromMatrix(CD8.df)
+```
+
+```{r adding cell type}
+B.df$CellType <- rep("B",times=dim(B.df)[1])
+CD8.df$CellType <- rep("CD8", times=dim(CD8.df)[1])
+```
+
+```{r initial data clean function}
+cleanData <- function(df){
+  
+  n <- dim(df)[1]
+  p <- 26361
+  
+  # Find bad cells (should be none as all experimental effects should have been accounted for)
+  bad_cells <- df %>%
+    mutate(nums = rowSums(across(where(is.numeric)) != 0)) %>%
+    filter(nums == 0) %>%
+    select(1:p)
+  
+  # Remove bad cells
+  df <- df %>% 
+    suppressMessages(left_join(bad_cells))
+  
+  # Seurat (and most other BioConductor packages) likes genes as rows and cells as columns
+  # Also use this step to remove genes expressed in less than 10 cells 
+  trans.df <- data.frame(t(df[1:p])) %>%
+    mutate(nums = rowSums(across(where(is.numeric)))) %>%
+    filter(nums > 10) %>%
+    select(1:n)
+  
+  return(trans.df)
+}
+```
+
+```{r create SeuratObject}
+SeuratObject <- function(df) {
+  sr <- CreateSeuratObject(counts=cleanData(df))
+  sr <- AddMetaData(sr,df$Patient,col.name = 'Patient')
+  sr <- AddMetaData(sr,df$CovidPos, col.name = 'Covid')
+  sr <- AddMetaData(sr,df$CellType,col.name = 'CellType')
+  return(sr)
+}
+```
+
+
+## Exploratory Analysis in Seurat
+Seurat has some basic data transforming and clustering tools for initial exploratory analysis
+
+
+```{r}
+integrateSO <- function(sr){
+  sr.list <- SplitObject(sr, split.by = "Covid")
+
+  sr.list <- lapply(X = sr.list, FUN = function(x) {
+      x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 3000)
+  })
+  
+  anchors <- FindIntegrationAnchors(object.list = sr.list, dims = 1:20)
+  sr.combined <- IntegrateData(anchorset = anchors, dims = 1:20)
+}
+```
+
+
+```{r}
+exploratoryPrep <- function(sr.combined){
+  DefaultAssay(sr.combined) <- "integrated"
+  
+  sr.combined <- ScaleData(sr.combined, verbose = FALSE)
+  sr.combined <- RunPCA(sr.combined, verbose = FALSE)
+  sr.combined <- RunUMAP(sr.combined, reduction = "pca", dims = 1:30, verbose = FALSE)
+  sr.combined <- FindNeighbors(sr.combined, reduction = "pca", dims = 1:30)
+  sr.combined <- FindClusters(sr.combined, resolution = 0.5)
+}
+```
+
+
+```{r prepping}
+
+B.sr <- SeuratObject(B.df) %>%
+  integrateSO() %>%
+  exploratoryPrep()
+
+CD8.sr <- SeuratObject(CD8.df) %>%
+  integrateSO() %>%
+  exploratoryPrep()
+```
+
+
+
+
+```{r results of assays, fig.keep='all'}
+B.sr@assays$integrated
+CD8.sr@assays$integrated
+```
+
