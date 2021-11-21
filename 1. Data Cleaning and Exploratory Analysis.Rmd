@@ -12,7 +12,6 @@ knitr::opts_chunk$set(
 	results = "hide",
 	fig.keep='all'
 )
-require(ggplot2)
 require(sctransform)
 require(Seurat)
 require(tidyverse)
@@ -23,11 +22,9 @@ detach(package:RColorBrewer)
 ```
 
 ```{r,libraries,echo=FALSE}
-library(ggplot2)
 library(sctransform)
 library(Seurat)
 library(tidyverse)
-library(ggrepel)
 ```
 
 

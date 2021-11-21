@@ -1,0 +1,95 @@
+git---
+title: "Differential Expression Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message=F,cache=T,warning=F, fig.keep='all')
+require(edgeR)
+require(Seurat)
+require(dplyr)
+```
+
+```{r}
+createDGEList <- function(sr){
+  # Grab raw counts of variable genes identified when integrating
+  genes <- sr@assays$integrated@var.features
+  sr <- subset(sr,features=genes)
+  
+  # Create list and prep data for edgeR
+  group <- sr@meta.data$Covid
+  dge <- DGEList(counts=sr@assays$RNA@counts,group=group)
+  
+  #Make sure that Control is the base level
+  dge$samples$group <- relevel(dge$samples$group,ref="Control")
+  
+  design <- model.matrix(~dge$samples$group)
+  
+  # initial dispersion estimation
+  dge <- estimateDisp(dge, design, robust=TRUE)
+  return(dge)
+}
+```
+
+```{r}
+getResults <- function(dge) {
+  Covid <- factor(dge$samples$group)
+  Covid <- relevel(Covid,ref="Control")
+  design <- model.matrix(~Covid)
+  fit <- glmQLFit(dge,design, robust=TRUE)
+  qlf <- glmQLFTest(fit,coef=2)
+  return(qlf)
+}
+
+```
+
+
+
+```{r,results='show'}
+B.dge <- createDGEList(B.sr) 
+CD8.dge <- createDGEList(CD8.sr)
+```
+
+```{r}
+B.qlf <- getResults(B.dge)
+CD8.qlf <- getResults(CD8.dge)
+```
+
+
+Output results for DAVID and visualisation
+```{r output}
+outputRes <- function(res, cellType,FCthres,Pthres){
+
+  up.degs <- res %>%
+    filter(FDR <= Pthres) %>%
+    filter(logFC > FCthres[2]) %>%
+    mutate(Type="UP") %>%
+    select(Type)
+  up.degs$Genes <- rownames(up.degs)
+  down.degs <- res %>%
+    filter(FDR <= Pthres) %>%
+    filter(logFC < FCthres[1]) %>%
+    mutate(Type="DOWN") %>%
+    select(Type)
+  down.degs$Genes <- rownames(down.degs)
+  write.table(cbind(up.degs$Genes, down.degs$Genes), 
+              file = paste0(cellType, "-cell-deg-names.CSV"),
+              row.names = FALSE, 
+              quote = FALSE, 
+              #col.names = c(paste0(cellType,"-up"),paste0(cellType,"-down")),
+              sep=" & ")
+  rownames(res) <- NULL
+  return(rbind(up.degs, down.degs))
+}
+
+
+B.res <- as.data.frame(topTags(B.qlf, n = nrow(B.qlf)))
+CD8.res <- as.data.frame(topTags(CD8.qlf, n = nrow(CD8.qlf)))
+
+B.degs <- outputRes(B.res, "B",c(-1,1),0.05)
+CD8.degs <- outputRes(CD8.res,"CD8-T",c(-0.5,1),0.05)
+
+```
+
+
+
