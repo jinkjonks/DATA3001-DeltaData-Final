@@ -1,0 +1,192 @@
+---
+title: "Network Analysis"
+output: html_document
+---
+
+```{r setup, echo=F}
+knitr::opts_chunk$set(
+	echo = T,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE,
+	results = "hide",
+	fig.keep='all'
+)
+require(tidyverse)
+require(caret)
+require(glmnet)
+require(reshape2)
+require(dplyr)
+require(igraph)
+```
+
+```{r Setup Dataframe Function}
+setupDF <- function(degs, df){
+  use.cells <- rownames(degs)
+  subset.df <- df[,(colnames(df) %in% use.cells)]
+  subset.df$Covid_Pos = ifelse(df$CovidPos == 'Covid', 1, 0) 
+  return(subset.df)
+}
+```
+
+```{r LASSO function}
+# Returns a dataframe of significant genes based on LASSO regression
+LASSO.func <- function(df){
+  # Setup
+  X = model.matrix(Covid_Pos~., df)[,-1] # without intercept
+  y = df$Covid_Pos
+  cv.lasso = cv.glmnet(X, y, alpha = 1, family = "binomial")
+  plot(cv.lasso)
+  
+  # Fit LASSO Regression Model
+  lasso_model = glmnet(X, y, alpha = 1, family = "binomial", lambda = cv.lasso$lambda.min)
+  
+  # Dataframe non-zero predictors
+  MyCoefs = coef(cv.lasso, cv.lasso$lambda.min)
+  MyCoefs[which(MyCoefs != 0)]
+  
+  myLassoResults = data.frame(
+    sigGenes = MyCoefs@Dimnames[[1]][ which(MyCoefs != 0) ],
+    estimated_coefs = MyCoefs[ which(MyCoefs != 0) ]
+  )
+  
+  # Intercept included
+  myLassoResults$sigGenes = gsub("`","",myLassoResults$sigGenes)
+  head(myLassoResults)
+  
+  # Extract Significant Genes by LASSO
+  lasso.df = df[, (names(df) %in% myLassoResults$sigGenes)]
+  lasso.df$Covid_Pos = df$Covid_Pos
+  return(lasso.df)
+}
+```
+
+```{r Split DF by Condition}
+split.on.condition <- function(df, condition){
+  new.df <- subset(df, Covid_Pos == condition)
+  new.df <- new.df[, -which(colnames(new.df) == "Covid_Pos")]
+  return(new.df)
+}
+```
+
+```{r Network Function}
+PlotNetwork <- function(df) {
+  # Correlation matrix
+  df.cor = cor(df)
+  df.cor[upper.tri(df.cor)] = 666666
+  df.melt = melt(df.cor)
+  df.melt = filter(df.melt, value != 666666) %>% filter(Var1 != Var2)
+  
+  # Adjacent list
+  # Specify cutoff to keep genes w/ higher/lower correlations
+  cutoff <- quantile(df.melt$value, probs = 0.95)
+  df_adj_list = df.melt %>% filter(value > cutoff)
+  names(df_adj_list) = c('from', 'to', 'weight')
+  
+  net <- graph.data.frame(df_adj_list, directed = FALSE)
+  
+  return(net)
+}
+```
+
+```{r Setup B and CD8 T cell dfs}
+bcell.subset.df <- setupDF(B.degs, B.df)
+cd8cell.subset.df <- setupDF(B.degs, CD8.df)
+```
+
+```{r run LASSO}
+b.lasso.df <- LASSO.func(bcell.subset.df)
+cd8.lasso.df <- LASSO.func(cd8cell.subset.df)
+```
+
+```{r Split Datasets}
+# B cells
+b.covid <- split.on.condition(b.lasso.df, 1)
+b.healthy <- split.on.condition(b.lasso.df, 0)
+# CD8 T cells
+cd8.covid <- split.on.condition(cd8.lasso.df, 1)
+cd8.healthy <- split.on.condition(cd8.lasso.df, 0)
+```
+
+```{r Create Networks}
+b.covid.net <- PlotNetwork(b.covid)
+b.healthy.net <- PlotNetwork(b.healthy)
+cd8.covid.net <- PlotNetwork(cd8.covid)
+cd8.healthy.net <- PlotNetwork(cd8.healthy)
+```
+
+```{r Communities}
+b.cov.com <- cluster_edge_betweenness(b.covid.net)
+b.h.com <- cluster_edge_betweenness(b.healthy.net)
+cd8.cov.com <- cluster_edge_betweenness(cd8.covid.net)
+cd8.h.com <- cluster_edge_betweenness(cd8.healthy.net)
+```
+
+```{r B network summary}
+# Degrees
+b.healthy.degs <- degree(b.healthy.net, mode = 'all')
+b.covid.degs <- degree(b.covid.net, mode = 'all')
+b.diff <- b.healthy.degs - b.covid.degs
+mean(b.diff)
+head(sort(abs(b.diff), decreasing = TRUE))
+# Components
+length(decompose(b.healthy.net))
+mean(b.healthy.degs)
+length(decompose(b.covid.net))
+median(b.covid.degs)
+mean(b.diff)
+```
+
+```{r B Cell Degrees Summary}
+head(sort(b.healthy.degs, decreasing = TRUE))
+head(sort(b.healthy.degs))
+head(sort(b.covid.degs, decreasing = TRUE))
+head(sort(b.covid.degs))
+```
+
+```{r CD8 network summary info}
+# Degrees
+cd8.healthy.degs <- degree(cd8.healthy.net, mode = "all")
+cd8.covid.degs <- degree(cd8.covid.net, mode = "all")
+length(decompose(cd8.healthy.net))
+length(decompose(cd8.covid.net))
+mean(cd8.healthy.degs)
+mean(cd8.covid.degs)
+cd8.diff <- cd8.healthy.degs - cd8.covid.degs
+head(sort(abs(cd8.diff), decreasing = TRUE))
+```
+
+```{r CD8 Cell Degrees Summary}
+head(sort(cd8.healthy.degs, decreasing = TRUE))
+head(sort(cd8.healthy.degs))
+head(sort(cd8.covid.degs, decreasing = TRUE))
+head(sort(cd8.covid.degs))
+```
+
+```{r Modularity}
+# Modularity
+modularity(b.healthy.net, membership(b.h.com))
+modularity(b.covid.net, membership(b.cov.com))
+modularity(cd8.healthy.net, membership(cd8.h.com))
+modularity(cd8.covid.net, membership(cd8.cov.com))
+```
+
+```{r Hub Genes}
+# Hub genes for covid networks
+hub.b <- round(hub_score(b.covid.net)$vector[hub_score(b.covid.net)$vector > 0.5], 2)
+sort(hub.b, decreasing = T)
+hub.cd8 <- round(hub_score(cd8.covid.net)$vector[hub_score(cd8.covid.net)$vector > 0.5], 2)
+sort(hub.cd8, decreasing = T)
+```
+
+```{r Differences}
+# Differences in the networks (edges only present in the covid networks)
+length(E(difference(b.covid.net, b.healthy.net)))
+length(E(difference(cd8.covid.net, cd8.healthy.net)))
+# Differences in the networks (edges only present in the healthy networks)
+length(E(difference(b.healthy.net, b.covid.net)))
+length(E(difference(cd8.healthy.net, cd8.covid.net)))
+# Most additional edges
+sort(degree(difference(b.covid.net, b.healthy.net)), decreasing = T)[1:5]
+sort(degree(difference(cd8.covid.net, cd8.healthy.net)), decreasing = T)[1:5]
+```
