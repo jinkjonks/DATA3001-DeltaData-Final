@@ -6,7 +6,7 @@ This repository contains the code used to produce results for our capstone proje
 ## How to run the code
 After cloning this repo, place relevant .RData files in the same directory. 
 
-Then, run the files in the following order:
+Then, run all the chunks in each file in the following order:
 1. Data Cleaning & Exploratory Analysis
 2. Differential Expression Analysis
 3. Network Analysis
