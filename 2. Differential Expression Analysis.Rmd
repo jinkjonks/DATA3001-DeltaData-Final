@@ -56,7 +56,7 @@ CD8.qlf <- getResults(CD8.dge)
 ```
 
 
-Output results for DAVID and visualisation
+Output results for DAVID and Visualisation
 ```{r output}
 outputRes <- function(res, cellType,FCthres,Pthres){
 
@@ -72,14 +72,16 @@ outputRes <- function(res, cellType,FCthres,Pthres){
     mutate(Type="DOWN") %>%
     select(Type)
   down.degs$Genes <- rownames(down.degs)
+
   write.table(cbind(up.degs$Genes, down.degs$Genes), 
-              file = paste0(cellType, "-cell-deg-names.CSV"),
+              file = paste0(cellType, "-cell-deg-names.txt"),
               row.names = FALSE, 
               quote = FALSE, 
-              #col.names = c(paste0(cellType,"-up"),paste0(cellType,"-down")),
-              sep=" & ")
+              col.names = c(paste0(cellType,"-up"),paste0(cellType,"-down")),
+              sep="\t")
+  res <- rbind(up.degs,down.degs)
   rownames(res) <- NULL
-  return(rbind(up.degs, down.degs))
+  return(res)
 }
 
 
