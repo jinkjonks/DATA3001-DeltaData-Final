@@ -12,21 +12,10 @@ knitr::opts_chunk$set(
 	results = "hide",
 	fig.keep='all'
 )
-require(sctransform)
+
 require(Seurat)
 require(tidyverse)
-
-#These packages stop SNN from working for some reason
-detach(package:colortools)
-detach(package:RColorBrewer)
 ```
-
-```{r,libraries,echo=FALSE}
-library(sctransform)
-library(Seurat)
-library(tidyverse)
-```
-
 
 ## 1. Data Cleaning
 Data was given in nested matrices and was log-transformed.
