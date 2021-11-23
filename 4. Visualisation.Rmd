@@ -72,6 +72,7 @@ volcanoPlot <- function(res, FCthres, title){
   res$diffexp[res$logFC > FCthres[2] & res$FDR < 0.05] <- "UP"
   res$diffexp[res$logFC < FCthres[1] & res$FDR < 0.05] <- "DOWN"
   
+  #Add labels
   res <- res %>%
     mutate(delabel=ifelse(is.na(diffexp), NA, rownames(res))) 
   
