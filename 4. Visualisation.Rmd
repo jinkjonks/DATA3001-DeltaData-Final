@@ -113,7 +113,7 @@ Output results of the network analysis using the igraph plotting function
 ```{r Network Visualisations}
 net.plot <- function(net, title){
   plot(net, edge.width = E(net)$weight, vertex.shape="none", vertex.label.cex = 0.8, 
-       vertex.shape = NA, vertex.label.color = "black") + title(title, cex.main = 3)
+       vertex.shape = NA, vertex.label.color = "black") + title(title, cex.main = 2)
 }
 
 net.plot(b.covid.net, "B Cell: Covid-19 Network")
@@ -129,7 +129,7 @@ com.plot <- function(com, net, title){
   plot(net,edge.width = E(net)$weight, vertex.color = membership(com), vertex.size = 10,
        vertex.frame.color = NA, vertex.label.color = "black", vertex.label.cex = 0.7, 
        palette = brewer.pal(length(unique(membership(com))), "Set2")) + 
-    title(title, cex.main = 3)
+    title(title, cex.main = 2)
 }
 
 com.plot(b.cov.com, b.covid.net, "B Cell: Covid-19 Communities")
