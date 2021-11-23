@@ -1,6 +1,6 @@
-git---
+---
 title: "Differential Expression Analysis"
-output: html_document
+output: pdf
 ---
 
 ```{r setup, include=FALSE}

@@ -1,7 +1,6 @@
 ---
-title: Appendix A. Data Cleaning and Exploratory Analysis
-output:
-  html_document: default
+title: "Data Cleaning and Exploratory Analysis"
+output: pdf
 ---
 ```{r setup, echo=F}
 knitr::opts_chunk$set(

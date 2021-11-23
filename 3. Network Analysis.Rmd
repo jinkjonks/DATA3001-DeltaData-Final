@@ -1,6 +1,6 @@
 ---
 title: "Network Analysis"
-output: html_document
+output: pdf
 ---
 
 ```{r setup, echo=F}
@@ -22,7 +22,7 @@ require(igraph)
 
 ```{r Setup Dataframe Function}
 setupDF <- function(degs, df){
-  use.cells <- rownames(degs)
+  use.cells <- degs$Genes
   subset.df <- df[,(colnames(df) %in% use.cells)]
   subset.df$Covid_Pos = ifelse(df$CovidPos == 'Covid', 1, 0) 
   return(subset.df)

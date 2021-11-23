@@ -1,0 +1,179 @@
+---
+title: "4. Visualisation"
+output: pdf
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, message=F,warning=F, fig.keep='all')
+require(Seurat)
+require(dplyr)
+require(ggplot2)
+require(ggrepel)
+require(colortools)
+require(RColorBrewer)
+```
+
+
+# Exploratory Plots (Figure 1)
+Output results of initial exploratory analysis clustering using the UMAP reduction
+
+```{r Clustering, fig.keep='all'}
+# create plots
+Idents(B.sr) <- "Covid"
+Idents(CD8.sr) <- "Covid"
+
+conditionCols <- c("#8DD3C7", "#D38D99")
+
+# create plots with centered titles
+b.p1 <- DimPlot(B.sr, reduction = "umap", 
+                group.by="Covid", 
+                cols = conditionCols) +
+        CenterTitle() + 
+        ggtitle("B Cell: Cell Clusters") +
+        theme(plot.title=element_text(size=22))
+
+b.p2 <- DimPlot(B.sr, reduction = "umap", 
+                group.by = "seurat_clusters", 
+                cols = brewer.pal(n = 10, "Set3")[-2]) + 
+        CenterTitle() +
+        ggtitle("B Cell: Covid vs Healthy") +
+        theme(plot.title=element_text(size=22))
+
+
+# Repeat for CD8 T cells
+# create plots
+c.p1 <- DimPlot(CD8.sr, reduction = "umap", 
+                group.by="Covid", 
+                cols = conditionCols) + 
+        CenterTitle() + 
+        ggtitle(expression(bold("CD8"^'+'~ "T Cell: Covid-19 vs Healthy"))) +
+        theme(plot.title=element_text(size=22))
+
+c.p2 <- DimPlot(CD8.sr, reduction = "umap", 
+                group.by = "seurat_clusters", 
+                cols = brewer.pal(n = 10, "Set3")[-2]) + 
+        CenterTitle() +
+        ggtitle(expression(bold("CD8"^'+'~"T Cell: Clusters"))) +
+        theme(plot.title=element_text(size=22))
+
+# output
+c.p1
+c.p2
+b.p1
+b.p2
+```
+
+# Volcano plots (Figure 2)
+
+```{r}
+volcanoPlot <- function(res, FCthres, title){
+  #Add colours for differentially expressed genes
+  res$diffexp <- NA
+  res$diffexp[res$logFC > FCthres[2] & res$FDR < 0.05] <- "UP"
+  res$diffexp[res$logFC < FCthres[1] & res$FDR < 0.05] <- "DOWN"
+  
+  res <- res %>%
+    mutate(delabel=ifelse(is.na(diffexp), NA, rownames(res))) 
+  
+  p <- ggplot(data=res, aes(x=logFC, y=-log10(FDR),
+                                  col=diffexp,label=delabel)) +
+    geom_point() +
+    scale_color_manual(values=c("deepskyblue3","deeppink3")) +
+    geom_vline(xintercept=FCthres, col="red4", linetype = "dashed") + 
+    geom_hline(yintercept=-log10(0.05), col="red4",linetype="dashed") +
+    geom_jitter() +
+    geom_text_repel() + 
+    theme_minimal() +
+    ggtitle(title) + 
+    theme(plot.title=element_text(size=40, face = "bold"))
+}
+
+B.volcano <- volcanoPlot(B.res,c(-1,1), "B cell") + 
+  CenterTitle() + guides(color=F) +
+  labs(
+    x="logFC",
+    y="-log10(adj P-Val)"
+  ) 
+
+CD8.volcano <- volcanoPlot(CD8.res,c(-0.5,1), expression(bold("CD8"^'+'~ "T Cell"))) + 
+  CenterTitle() + guides(color=F) +
+  labs(
+    x="logFC",
+    y="-log10(adj P-Val)"
+  ) 
+
+# output plots
+B.volcano
+CD8.volcano
+```
+
+# Networks (Figure 3)
+Output results of the network analysis using the igraph plotting function
+
+```{r Network Visualisations}
+net.plot <- function(net, title){
+  plot(net, edge.width = E(net)$weight, vertex.shape="none", vertex.label.cex = 0.8, 
+       vertex.shape = NA, vertex.label.color = "black") + title(title, cex.main = 3)
+}
+
+net.plot(b.covid.net, "B Cell: Covid-19 Network")
+net.plot(b.healthy.net, "B Cell: Healthy Network")
+net.plot(cd8.covid.net, expression(bold("CD8"^'+'~ "T Cell: Covid-19 Network")))
+net.plot(cd8.healthy.net, expression(bold("CD8"^'+'~ "T Cell: Healthy Network")))
+```
+
+# Communities (Figure 4)
+```{r Communities}
+com.plot <- function(com, net, title){
+  layout = layout_with_kk(net)
+  plot(net,edge.width = E(net)$weight, vertex.color = membership(com), vertex.size = 10,
+       vertex.frame.color = NA, vertex.label.color = "black", vertex.label.cex = 0.7, 
+       palette = brewer.pal(length(unique(membership(com))), "Set2")) + 
+    title(title, cex.main = 3)
+}
+
+com.plot(b.cov.com, b.covid.net, "B Cell: Covid-19 Communities")
+com.plot(b.h.com, b.healthy.net, "B Cell: Healthy Communities")
+com.plot(cd8.cov.com, cd8.covid.net, expression(bold("CD8"^'+'~ "T Cell: Covid-19 Communities")))
+com.plot(cd8.h.com, cd8.healthy.net, expression(bold("CD8"^'+'~ "T Cell: Healthy Communities")))
+```
+
+# Dot Plots (Figure 5)
+```{r}
+# Use integrated data for visualisation
+DefaultAssay(B.sr) <- "integrated"
+DefaultAssay(CD8.sr) <- "integrated"
+
+# create plots for each cell type (B, CD8 T) and regulation type (up, down)
+B.up.dp  <- DotPlot(B.sr, 
+                    features = unique(B.degs$Genes[B.degs$Type=="UP"]), 
+                    dot.scale = 8, group.by="Patient") +
+    RotatedAxis() + CenterTitle() + 
+    ggtitle("B Cell: Up-Regulated Genes" ) +
+    theme(plot.title=element_text(size=22))
+
+CD8.up.dp <- DotPlot(CD8.sr, 
+                     features =unique(CD8.degs$Genes[CD8.degs$Type=="UP"]),  
+                     dot.scale = 8, group.by = "Patient") +
+    RotatedAxis() + CenterTitle() + 
+    ggtitle(expression(bold("CD8"^'+'~ "T Cell: Up-Regulated Genes" ))) + 
+    theme(plot.title = element_text(size = 22))
+
+B.down.dp <- DotPlot(B.sr, features = unique(B.degs$Genes[B.degs$Type=="DOWN"]),  
+                     dot.scale = 8, group.by="Patient") +
+    RotatedAxis() + CenterTitle() + 
+    ggtitle("B Cell: Down-Regulated Genes") + 
+    theme(plot.title = element_text(size = 22))
+
+CD8.down.dp <- DotPlot(CD8.sr, features = unique(CD8.degs$Genes[CD8.degs$Type=="DOWN"]),
+                       dot.scale = 8, group.by = "Patient") +
+    RotatedAxis() + CenterTitle() + 
+    ggtitle(expression(bold("CD8"^'+'~ "T Cell: Down-Regulated Genes" ))) + 
+    theme(plot.title = element_text(size = 22))
+
+# output dot plots
+B.up.dp
+B.down.dp
+CD8.up.dp
+CD8.down.dp
+```
